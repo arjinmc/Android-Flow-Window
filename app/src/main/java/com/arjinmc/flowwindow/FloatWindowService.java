@@ -5,29 +5,56 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.PixelFormat;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.View.OnClickListener;
 import android.view.View.OnTouchListener;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.widget.FrameLayout;
 
-public class FloatWindowService extends Service implements OnTouchListener,OnClickListener{
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class FloatWindowService extends Service implements OnTouchListener,View.OnClickListener{
 
 	private FrameLayout mFloatLayout;
 	private WindowManager mWindowManager;
 	private WindowManager.LayoutParams mLayoutParams;
+	private int delta;
+	private Timer mTimer;
 
 	public static final String STATUS_SHOW = "STATUS_SHOW";
 	public static final String STATUS_HIDE = "STATUS_HIDE";
 
 	private float mTouchStartY = 50.0f;
 	private float mTouchStartX = 0.0f;
+
+	private String currentAction;
+
+	private final int MSG_SHOW = 0x201;
+	private final int MSG_HIDE = 0x202;
+
+	private Handler handler = new Handler(){
+
+		@Override
+		public void handleMessage(Message msg) {
+			super.handleMessage(msg);
+			switch (msg.what){
+				case MSG_HIDE:
+					removeFloatView();
+					break;
+				case MSG_SHOW:
+					addFloatView();
+					break;
+			}
+		}
+	};
 
 	//save last position x,y
 	private final String FLOAT_WINDOW_POSITION = "FLOAT_WINDOW_POSITION";
@@ -48,12 +75,19 @@ public class FloatWindowService extends Service implements OnTouchListener,OnCli
 
 		if(intent!=null){
 			String action = intent.getAction();
+			currentAction = action;
 			if(action.equals(STATUS_SHOW)){
-				if(mFloatLayout==null){
-					addFloatView();
+				if(mTimer == null){
+					mTimer = new Timer();
+					mTimer.schedule(new RefreshTask(), 0, 1000);
 				}
+				handler.sendEmptyMessage(MSG_SHOW);
 			}else if(action.equals(STATUS_HIDE)){
-				removeFloatView();
+				handler.sendEmptyMessage(MSG_HIDE);
+				if(mTimer!=null){
+					mTimer.cancel();
+					mTimer = null;
+				}
 			}
 		}
 
@@ -88,8 +122,8 @@ public class FloatWindowService extends Service implements OnTouchListener,OnCli
 		
 		mWindowManager.addView(mFloatLayout, mLayoutParams);;
 
+		delta = mFloatLayout.getLeft()-mFloatLayout.getRight()/4;
 		mFloatLayout.setOnTouchListener(this);
-		
 		mFloatLayout.setOnClickListener(this);
 	}
 	
@@ -101,30 +135,36 @@ public class FloatWindowService extends Service implements OnTouchListener,OnCli
 	}
 
 	@Override
-	public void onClick(View v) {
-		Intent mainItent = new Intent(FloatWindowService.this,MainActivity.class);
-		mainItent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-		startActivity(mainItent);
-	}
-
-	@Override
 	public boolean onTouch(View v, MotionEvent event) {
-		float y = event.getRawY() - 25;
-		float x = event.getRawX() - 25;
+		float y = event.getRawY()- delta;
+		float x = event.getRawX()- delta;
+		int firstX = 0;
 		switch (event.getAction()) {
 		case MotionEvent.ACTION_DOWN:
 			mTouchStartY = event.getY();
 			mTouchStartX = event.getX();
-			break;
+
+			firstX = (int) event.getX();
+
 		case MotionEvent.ACTION_MOVE:
 			updateViewPosition(x,y);
-			break;
+
 		case MotionEvent.ACTION_UP:
-			updateViewPosition(x,y);
-			savePoint(x,y);
-			break;
+
+			int secondX = (int) event.getX();
+			int distance = Math.abs(secondX-firstX);
+
+			if (distance <= 80) {
+				return false;
+			}else {
+				updateViewPosition(x,y);
+				savePoint(x,y);
+				return true;
+			}
+
 		}
 		return false;
+
 	}
 
 	private void updateViewPosition(float x,float y) {
@@ -141,9 +181,31 @@ public class FloatWindowService extends Service implements OnTouchListener,OnCli
 	}
 
 
+	class RefreshTask extends TimerTask {
+
+		@Override
+		public void run() {
+			if(currentAction!=null && currentAction.equals(STATUS_SHOW)){
+				handler.sendEmptyMessage(MSG_SHOW);
+			}
+		}
+	}
+
+
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
+		if(mTimer!=null){
+			mTimer.cancel();
+			mTimer = null;
+		}
 		removeFloatView();
+	}
+
+	@Override
+	public void onClick(View v) {
+		Intent mainItent = new Intent(FloatWindowService.this,MainActivity.class);
+		mainItent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+		startActivity(mainItent);
 	}
 }
