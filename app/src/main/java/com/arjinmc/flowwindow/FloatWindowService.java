@@ -155,6 +155,7 @@ public class FloatWindowService extends Service implements OnTouchListener,View.
 			int distance = Math.abs(secondX-firstX);
 
 			if (distance <= 80) {
+				savePoint(x,y);
 				return false;
 			}else {
 				updateViewPosition(x,y);

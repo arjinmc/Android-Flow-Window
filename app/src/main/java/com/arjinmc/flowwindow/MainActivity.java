@@ -2,7 +2,7 @@ package com.arjinmc.flowwindow;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.content.SharedPreferences;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -12,19 +12,8 @@ public class MainActivity extends Activity {
 
 	private Button btn1, btn2;
 
-	private final String FLOW_WINDOW_STATUS = "FLOW_WINDOW_STATUS";
 
-	private void saveFlowWindowStatus(boolean isOpen){
-		SharedPreferences sharedPreferences = getSharedPreferences(FLOW_WINDOW_STATUS,MODE_PRIVATE);
-		SharedPreferences.Editor editor = sharedPreferences.edit();
-		editor.putBoolean("isOpen",isOpen);
-		editor.commit();
-	}
-
-	private boolean getFlowWindowStatus(){
-		SharedPreferences sharedPreferences = getSharedPreferences(FLOW_WINDOW_STATUS,MODE_PRIVATE);
-		return sharedPreferences.getBoolean("isOpen",false);
-	}
+	private HomeReceiver homeReceiver;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -41,7 +30,7 @@ public class MainActivity extends Activity {
 				Intent intent = new Intent(MainActivity.this, FloatWindowService.class);
 				intent.setAction(FloatWindowService.STATUS_SHOW);
 				startService(intent);
-				saveFlowWindowStatus(true);
+				SPUtil.saveFlowWindowStatus(MainActivity.this,true);
 				finish();
 			}
 		});
@@ -52,7 +41,7 @@ public class MainActivity extends Activity {
 			public void onClick(View v) {
 				Intent intent = new Intent(MainActivity.this, FloatWindowService.class);
 				stopService(intent);
-				saveFlowWindowStatus(false);
+				SPUtil.saveFlowWindowStatus(MainActivity.this,false);
 			}
 		});
 	}
@@ -60,18 +49,29 @@ public class MainActivity extends Activity {
 	@Override
 	protected void onResume() {
 		super.onResume();
-		if(getFlowWindowStatus()){
+		if(SPUtil.getFlowWindowStatus(this)){
 			Intent intent = new Intent(MainActivity.this, FloatWindowService.class);
 			intent.setAction(FloatWindowService.STATUS_HIDE);
 			startService(intent);
 		}
+		homeReceiver = new HomeReceiver();
+		IntentFilter filter = new IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+		registerReceiver(homeReceiver,filter);
 
+	}
+
+	@Override
+	protected void onPause() {
+		super.onPause();
+		if(homeReceiver!=null){
+			unregisterReceiver(homeReceiver);
+		}
 	}
 
 	@Override
 	protected void onDestroy() {
 		super.onDestroy();
-		if(getFlowWindowStatus()){
+		if(SPUtil.getFlowWindowStatus(this)){
 			Intent intent = new Intent(MainActivity.this, FloatWindowService.class);
 			intent.setAction(FloatWindowService.STATUS_SHOW);
 			startService(intent);
